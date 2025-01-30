@@ -57,7 +57,7 @@ function App() {
     setIsProcessing(true);
 
     try {
-      const response = await axios.post('http://3.92.137.224:8000/api/chat', {
+      const response = await axios.post('http://34.224.69.192:8000/api/chat', {
         text: inputText
       });
 
@@ -118,7 +118,7 @@ function App() {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
             
-            const response = await axios.post('http://3.92.137.224:8000/api/transcribe', formData, {
+            const response = await axios.post('http://34.224.69.192:8000/api/transcribe', formData, {
               headers: {
                 'Content-Type': 'multipart/form-data',
               },

@@ -7,7 +7,7 @@ type Message = {
   text: string;
   isUser: boolean;
   timestamp: Date;
-  audio?: string; // base64 audio string
+  audio?: string;
 };
 
 function App() {
@@ -30,12 +30,10 @@ function App() {
 
   const playAudio = (audioBase64: string, messageId: string) => {
     if (audioRef.current) {
-      // Stop any currently playing audio
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
 
-    // Create audio element for new audio
     const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
     audioRef.current = audio;
     setIsPlaying(messageId);
@@ -59,7 +57,7 @@ function App() {
     setIsProcessing(true);
 
     try {
-      const response = await axios.post('http://localhost:8000/api/chat', {
+      const response = await axios.post('http://3.92.137.224:8000/api/chat', {
         text: inputText
       });
 
@@ -68,11 +66,10 @@ function App() {
         text: response.data.response,
         isUser: false,
         timestamp: new Date(),
-        audio: response.data.audio // Save the base64 audio
+        audio: response.data.audio
       };
       setMessages(prev => [...prev, botMessage]);
       
-      // Automatically play the response
       if (botMessage.audio) {
         playAudio(botMessage.audio, botMessage.id);
       }
@@ -121,20 +118,18 @@ function App() {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
             
-            const response = await axios.post('http://localhost:8000/api/transcribe', formData, {
+            const response = await axios.post('http://3.92.137.224:8000/api/transcribe', formData, {
               headers: {
                 'Content-Type': 'multipart/form-data',
               },
             });
 
-            // Update user message with transcribed text
             setMessages(prev => prev.map(msg => 
               msg.id === userMessage.id 
                 ? { ...msg, text: response.data.text }
                 : msg
             ));
 
-            // Add bot response with audio
             const botMessage: Message = {
               id: Date.now().toString(),
               text: response.data.response,
@@ -144,7 +139,6 @@ function App() {
             };
             setMessages(prev => [...prev, botMessage]);
 
-            // Automatically play the response
             if (botMessage.audio) {
               playAudio(botMessage.audio, botMessage.id);
             }
@@ -184,7 +178,6 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
       <div className="container mx-auto max-w-4xl h-screen p-4 flex flex-col">
-        {/* Header with Mode Toggle */}
         <div className="text-center mb-4 relative">
           <div className="absolute left-1/2 -translate-x-1/2 top-0 bg-gray-700 rounded-full p-1 shadow-lg">
             <div className="flex items-center">
@@ -220,7 +213,6 @@ function App() {
           </p>
         </div>
 
-        {/* Messages Container */}
         <div className="flex-1 overflow-y-auto bg-gray-800 rounded-lg p-4 mb-4">
           {messages.map((message) => (
             <div
@@ -266,7 +258,6 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Input Container */}
         <div className="bg-gray-800 rounded-lg p-4">
           <div className="flex items-center gap-2">
             {mode === 'text' ? (

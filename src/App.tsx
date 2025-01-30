@@ -2,6 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Mic, MicOff, Send, MessageSquare, Volume2, Loader2, VolumeX, Play } from 'lucide-react';
 import axios from 'axios';
 
+// Use environment variable with fallback
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://3.92.137.224:8000';
+// const API_URL = window.location.protocol === 'https:' ? 'https://3.92.137.224:8000' : 'http://3.92.137.224:8000';
+
 type Message = {
   id: string;
   text: string;
@@ -16,10 +20,12 @@ function App() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPlaying, setIsPlaying] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [mode, setMode] = useState<'voice' | 'text'>('text');
 
+  // Scroll to bottom on new messages
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -28,22 +34,42 @@ function App() {
     scrollToBottom();
   }, [messages]);
 
+  // Check API connection on mount
+  useEffect(() => {
+    const checkAPI = async () => {
+      try {
+        await axios.get(`${API_URL}/health`);
+        setError(null);
+      } catch (err) {
+        setError('Unable to connect to AI service. Please try again later.');
+        console.error('API Connection Error:', err);
+      }
+    };
+    checkAPI();
+  }, []);
+
   const playAudio = (audioBase64: string, messageId: string) => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+    try {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
+
+      const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
+      audioRef.current = audio;
+      setIsPlaying(messageId);
+
+      audio.play().catch(console.error);
+      audio.onended = () => setIsPlaying(null);
+    } catch (err) {
+      console.error('Audio playback error:', err);
+      setError('Error playing audio. Please try again.');
     }
-
-    const audio = new Audio(`data:audio/mp3;base64,${audioBase64}`);
-    audioRef.current = audio;
-    setIsPlaying(messageId);
-
-    audio.play().catch(console.error);
-    audio.onended = () => setIsPlaying(null);
   };
 
   const handleSendMessage = async () => {
     if (!inputText.trim()) return;
+    setError(null);
 
     const newMessage: Message = {
       id: Date.now().toString(),
@@ -57,8 +83,13 @@ function App() {
     setIsProcessing(true);
 
     try {
-      const response = await axios.post('http://3.92.137.224:8000/api/chat', {
+      const response = await axios.post(`${API_URL}/api/chat`, {
         text: inputText
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000 // 30 second timeout
       });
 
       const botMessage: Message = {
@@ -68,6 +99,7 @@ function App() {
         timestamp: new Date(),
         audio: response.data.audio
       };
+      
       setMessages(prev => [...prev, botMessage]);
       
       if (botMessage.audio) {
@@ -75,9 +107,11 @@ function App() {
       }
     } catch (error) {
       console.error('Error sending message:', error);
+      setError('Unable to get response from AI. Please try again.');
+      
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: "Sorry, I encountered an error processing your message.",
+        text: "I'm having trouble connecting to the server. Please check your connection and try again.",
         isUser: false,
         timestamp: new Date(),
       };
@@ -88,6 +122,8 @@ function App() {
   };
 
   const toggleRecording = async () => {
+    setError(null);
+    
     if (!isRecording) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -118,15 +154,16 @@ function App() {
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
             
-            const response = await axios.post('http://3.92.137.224:8000/api/transcribe', formData, {
+            const response = await axios.post(`${API_URL}/api/transcribe`, formData, {
               headers: {
                 'Content-Type': 'multipart/form-data',
               },
+              timeout: 30000 // 30 second timeout
             });
 
             setMessages(prev => prev.map(msg => 
               msg.id === userMessage.id 
-                ? { ...msg, text: response.data.text }
+                ? { ...msg, text: response.data.text || 'Voice message processed' }
                 : msg
             ));
 
@@ -137,6 +174,7 @@ function App() {
               timestamp: new Date(),
               audio: response.data.audio
             };
+            
             setMessages(prev => [...prev, botMessage]);
 
             if (botMessage.audio) {
@@ -144,9 +182,11 @@ function App() {
             }
           } catch (error) {
             console.error('Error processing voice:', error);
+            setError('Error processing voice message. Please try again.');
+            
             const errorMessage: Message = {
               id: Date.now().toString(),
-              text: "Sorry, I encountered an error processing your voice message.",
+              text: "I'm having trouble processing your voice message. Please try again.",
               isUser: false,
               timestamp: new Date(),
             };
@@ -159,6 +199,7 @@ function App() {
         mediaRecorder.start(200);
         setIsRecording(true);
 
+        // Auto-stop after 5 seconds
         setTimeout(() => {
           if (mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
@@ -168,6 +209,7 @@ function App() {
         }, 5000);
       } catch (error) {
         console.error('Error accessing microphone:', error);
+        setError('Unable to access microphone. Please check your permissions.');
         setIsRecording(false);
       }
     } else {
@@ -178,6 +220,7 @@ function App() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-gray-800 text-white">
       <div className="container mx-auto max-w-4xl h-screen p-4 flex flex-col">
+        {/* Header */}
         <div className="text-center mb-4 relative">
           <div className="absolute left-1/2 -translate-x-1/2 top-0 bg-gray-700 rounded-full p-1 shadow-lg">
             <div className="flex items-center">
@@ -213,6 +256,14 @@ function App() {
           </p>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-500 text-white p-3 rounded-lg mb-4 text-center">
+            {error}
+          </div>
+        )}
+
+        {/* Messages */}
         <div className="flex-1 overflow-y-auto bg-gray-800 rounded-lg p-4 mb-4">
           {messages.map((message) => (
             <div
@@ -227,7 +278,7 @@ function App() {
                 }`}
               >
                 <div className="flex justify-between items-start gap-2">
-                  <p>{message.text}</p>
+                  <p className="break-words">{message.text}</p>
                   {!message.isUser && message.audio && (
                     <button
                       onClick={() => playAudio(message.audio!, message.id)}
@@ -258,6 +309,7 @@ function App() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Input */}
         <div className="bg-gray-800 rounded-lg p-4">
           <div className="flex items-center gap-2">
             {mode === 'text' ? (
@@ -269,10 +321,12 @@ function App() {
                   onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                   placeholder="Type your message..."
                   className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={isProcessing}
                 />
                 <button
                   onClick={handleSendMessage}
-                  className="p-2 bg-blue-600 rounded-full hover:bg-blue-700 transition-colors"
+                  disabled={isProcessing || !inputText.trim()}
+                  className="p-2 bg-blue-600 rounded-full hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   <Send className="w-6 h-6" />
                 </button>
@@ -280,9 +334,10 @@ function App() {
             ) : (
               <button
                 onClick={toggleRecording}
+                disabled={isProcessing}
                 className={`flex-1 p-4 ${
                   isRecording ? 'bg-red-600' : 'bg-blue-600'
-                } rounded-lg hover:opacity-90 transition-colors flex items-center justify-center gap-2`}
+                } rounded-lg hover:opacity-90 transition-colors flex items-center justify-center gap-2 disabled:opacity-50`}
               >
                 {isRecording ? (
                   <>

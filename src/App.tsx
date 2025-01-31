@@ -38,25 +38,16 @@ function App() {
     audioRef.current = audio;
     setIsPlaying(messageId);
 
-    audio.oncanplaythrough = () => {
-      audio.play().catch(console.error);
-    };
-
-    audio.onerror = (error) => {
-      console.error("Audio playback error:", error);
-      setIsPlaying(null);
-    };
-
+    audio.play().catch(console.error);
     audio.onended = () => setIsPlaying(null);
   };
 
   const handleSendMessage = async () => {
-    const text = inputText.trim();
-    if (!text) return;
+    if (!inputText.trim()) return;
 
     const newMessage: Message = {
       id: Date.now().toString(),
-      text: text,
+      text: inputText,
       isUser: true,
       timestamp: new Date(),
     };
@@ -66,26 +57,22 @@ function App() {
     setIsProcessing(true);
 
     try {
-      const response = await axios.post('http://34.224.69.192:8000/api/chat', { text });
+      const response = await axios.post('http://34.224.69.192:8000/api/chat', {
+        text: inputText
+      });
+
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
         text: response.data.response,
         isUser: false,
         timestamp: new Date(),
-        audio: response.data.audio,
+        audio: response.data.audio
       };
-
-
-      setMessages(prev => {
-        const updatedMessages = [...prev, botMessage];
-        return updatedMessages;
-      }, () => {
-        if (botMessage.audio) {
-          playAudio(botMessage.audio, botMessage.id);
-        }
-      });
-
-
+      setMessages(prev => [...prev, botMessage]);
+      
+      if (botMessage.audio) {
+        playAudio(botMessage.audio, botMessage.id);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       const errorMessage: Message = {
@@ -104,7 +91,9 @@ function App() {
     if (!isRecording) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm'
+        });
         const audioChunks: BlobPart[] = [];
 
         mediaRecorder.ondataavailable = (event) => {
@@ -128,15 +117,15 @@ function App() {
 
             const formData = new FormData();
             formData.append('audio', audioBlob, 'audio.webm');
-
+            
             const response = await axios.post('http://34.224.69.192:8000/api/transcribe', formData, {
               headers: {
                 'Content-Type': 'multipart/form-data',
               },
             });
 
-            setMessages(prev => prev.map(msg =>
-              msg.id === userMessage.id
+            setMessages(prev => prev.map(msg => 
+              msg.id === userMessage.id 
                 ? { ...msg, text: response.data.text }
                 : msg
             ));
@@ -146,19 +135,13 @@ function App() {
               text: response.data.response,
               isUser: false,
               timestamp: new Date(),
-              audio: response.data.audio,
+              audio: response.data.audio
             };
+            setMessages(prev => [...prev, botMessage]);
 
-            setMessages(prev => {
-              const updatedMessages = [...prev, botMessage];
-              return updatedMessages;
-            }, () => {
-              if (botMessage.audio) {
-                playAudio(botMessage.audio, botMessage.id);
-              }
-            });
-
-
+            if (botMessage.audio) {
+              playAudio(botMessage.audio, botMessage.id);
+            }
           } catch (error) {
             console.error('Error processing voice:', error);
             const errorMessage: Message = {
@@ -172,27 +155,6 @@ function App() {
             setIsProcessing(false);
           }
         };
-
-        mediaRecorder.start(200);
-        setIsRecording(true);
-
-        setTimeout(() => {
-          if (mediaRecorder.state === 'recording') {
-            mediaRecorder.stop();
-            stream.getTracks().forEach(track => track.stop());
-            setIsRecording(false);
-          }
-        }, 5000);
-      } catch (error) {
-        console.error('Error accessing microphone:', error);
-        setIsRecording(false);
-      }
-    } else {
-      setIsRecording(false);
-    }
-  };
-
-
 
         mediaRecorder.start(200);
         setIsRecording(true);
